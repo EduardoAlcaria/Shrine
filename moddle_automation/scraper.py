@@ -23,47 +23,73 @@ def login(page):
     page.fill("#username", USERNAME)
     page.fill("#password", PASSWORD)
     page.click("#loginbtn")
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("load")
     if "login" in page.url:
         raise RuntimeError("Login failed — check your credentials in .env")
 
 
+def _parse_activity(item, section_name):
+    activity = {"section": section_name}
+
+    modtype = item.get_attribute("data-modtype")
+    if modtype:
+        activity["type"] = modtype
+
+    link = item.query_selector(".activityname a, a.aalink")
+    if link:
+        name_el = link.query_selector(".instancename")
+        activity["name"] = (name_el.inner_text() if name_el else link.inner_text()).strip()
+        activity["url"] = link.get_attribute("href")
+    else:
+        name_div = item.query_selector("div.activity-item[data-activityname]")
+        if name_div:
+            activity["name"] = name_div.get_attribute("data-activityname") or ""
+
+    date_el = item.query_selector(".date, .info .date")
+    if date_el:
+        activity["due_date"] = date_el.inner_text().strip()
+
+    return activity if activity.get("name") else None
+
+
 def scrape_activities(page):
     page.goto(COURSE_URL)
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("load")
 
     activities = []
-    sections = page.query_selector_all("li.section.main, li.section")
 
-    for section in sections:
-        name_el = section.query_selector(".sectionname, h3.section-title, .content h3")
-        section_name = name_el.inner_text().strip() if name_el else "Unknown Section"
+    # Section 0 (Geral) is rendered directly on the main page
+    sec0_h3 = page.query_selector("#section-0 h3")
+    sec0_name = sec0_h3.inner_text().strip() if sec0_h3 else "Geral"
+    for item in page.query_selector_all("#section-0 li[data-for='cmitem']"):
+        act = _parse_activity(item, sec0_name)
+        if act:
+            activities.append(act)
 
-        for item in section.query_selector_all("li.activity"):
-            activity = {"section": section_name}
+    # Tile sections require navigating to each section URL
+    tiles = page.query_selector_all("a.tile-link[href]")
+    sections = []
+    for tile in tiles:
+        href = tile.get_attribute("href")
+        aria = tile.get_attribute("aria-label") or ""
+        name = aria.split(",")[0].strip() if aria else "Unknown"
+        sections.append((name, href))
 
-            link = item.query_selector("a")
-            if link:
-                activity["name"] = link.inner_text().strip()
-                activity["url"] = link.get_attribute("href")
-
-            for cls in (item.get_attribute("class") or "").split():
-                if cls.startswith("modtype_"):
-                    activity["type"] = cls.replace("modtype_", "")
-                    break
-
-            date_el = item.query_selector(".date, .info .date")
-            if date_el:
-                activity["due_date"] = date_el.inner_text().strip()
-
-            activities.append(activity)
+    for section_name, section_url in sections:
+        print(f"  Scraping: {section_name}")
+        page.goto(section_url)
+        page.wait_for_load_state("load")
+        for item in page.query_selector_all("li[data-for='cmitem']"):
+            act = _parse_activity(item, section_name)
+            if act:
+                activities.append(act)
 
     return activities
 
 
 def scrape_grades(page, course_id):
     page.goto(f"{MOODLE_URL}/grade/report/user/index.php?id={course_id}")
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("load")
 
     grades = []
     for row in page.query_selector_all("table.user-grade tr"):
