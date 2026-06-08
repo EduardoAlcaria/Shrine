@@ -3,4 +3,14 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+
+# scraped output / artifacts (may contain personal data)
 output.json
+moodle_output.json
+portal_output.json
+portal_*.json
+*.log
+*_dump.html
+course_dump.html
+portal_data/
+portal_scan/
