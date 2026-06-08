@@ -154,7 +154,7 @@ def collect_portal(headless=True, verbose=False):
                 if not target.startswith("/consulta/servlet/"):
                     continue
                 name_m = _SERVLET_NAME.search(target)
-                sname = name_m.group(1) if name_m else target
+                sname = re.sub(r"[^A-Za-z0-9_.-]", "_", name_m.group(1) if name_m else os.path.basename(target))
                 if any(s in target for s in SKIP_SERVLETS):
                     continue
                 try:
@@ -162,7 +162,8 @@ def collect_portal(headless=True, verbose=False):
                     ctype = r.headers.get("content-type", "")
                     if "application/pdf" in ctype:
                         cd = r.headers.get("content-disposition", "")
-                        fn = (re.search(r"filename=(.+)", cd) or [None, f"{sname}.pdf"])[1].strip().strip('"')
+                        fn_raw = (re.search(r"filename=(.+)", cd) or [None, f"{sname}.pdf"])[1].strip().strip('"')
+                        fn = re.sub(r"[^A-Za-z0-9_.\- ]", "_", os.path.basename(fn_raw))
                         raw = r.body()
                         data.append({
                             "label": label, "servlet": sname, "status": r.status,
